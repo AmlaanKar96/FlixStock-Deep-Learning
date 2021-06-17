@@ -1,0 +1,72 @@
+FlixStock Deep Learning Assignment
+
+Task:
+Perform multi-label classification on a dummy dataset consisting of shirt designs. Classification is to be done for the labels "pattern", "sleeve length" and "neck type" consisting of 7, 4 and 10 classes respectively.
+
+Dataset analysis:
+The dataset consists of 1782 images and a file attribute.csv of length 2238 detailing the labels of each image.
+898 out of 1782 images consisted of clean labels. The remaining images had at least one missing label out of the three.
+
+A hierarchical relationship was observed between the three labels. This can be seen in flixstock1.png (included with the submission), which is in the format
+{pattern: sleeve_length: neck_type: number of images}.
+
+The following patterns were observed from this image:
+(i) If the neck_type is not 9, pattern and sleeve_length are 6 and 3 respectively.
+(ii) Else, if the sleeve_length is not 3, pattern is 6.
+(iii) Else, pattern can be of any type.
+
+Using these patterns to fill the missing data, we increase the size of our dataset from 898 to 1351, with the distribution hierarchy (similar to flixstock1.png) shown in flixstock2.png.
+
+flixstock2.png shows that there is a class imbalance for all labels, with pattern 6, sleeve_length 3 and neck_type 9 being majority classes. This class imbalance will be dealt with later using data augmentation and imbalance-correcting training loss functions.
+
+
+Training method (brief):
+Before talking about data augmentation, I want to mention the training method in brief as both parts are slightly related. The following two training methods were considered:
+(i) Hierarchical classification using the three patterns observed in the data
+(ii) Multi-branch classification
+(iii) Multi-label classification
+
+
+The methods will be explained in detail later.
+
+
+Data augmentation:
+For the hierarchical classification, I chose to augment only the minority class for each label. This augmentation was done using horizontal flips, rotation, affine transformation and gaussian blur.
+
+For the multi-branch classification, it was not possible to augment for minority classes, as minority class of one label would be associated with majority classes of the other labels. Thus, the whole training set was augmented using these transformations.
+
+Training method (full):
+The two training methods mentioned above consisted of a base network with 2 conv layers. This could have been replace with a more complex pretrained model with frozen weights, but space and time issues and gpu availability on Google Colab did not allow that, which is why I chose to train a small dummy network with 2 conv. layers. These conv layers are followed by three branches of three fc layers in case of multi-branch classification and one branch of three fc layers in case of multilabel classification. Hierarchical classification consists of five branches, each consisting of one fc layer, as explained below.
+
+(i) Hierarchical classification
+
+This method was inspired by the fact that I could remove data imbalance by following the patterns and classifying each label one at a time.
+1. Perform binary classification on 1st branch to classify image as having/not having neck_type 9.
+2. If neck_type is not 9, pattern=6, sleeve_length=3, perform multiclass classification on 2nd branch to classify neck_type from 0-8. End classification.
+3. Else perform binary classification on 3rd branch to classify image as having/not having sleeve_length 3.
+4. If sleeve_length is not 3, pattern=6, perform multiclass classification on 4th branch to classify sleeve_length from 0-2. End classification.
+5. Else perform multiclass classification on 5th branch to classify pattern from 0-6.
+
+Training is done on each branch in the above order, while the conv layers are trained in each iteration. Each branch is trained with Binary/Categorical Cross Entropy loss, tanh activation and Adam optimizer. To further mitigate the class imbalance, weighted cross entropy was used.
+
+(ii) Multi-branch classification
+This network consists of 3 branches, one for each label. Training on all branches is performed simultaneously with weighted cross-entropy loss.
+
+(iii) Multi-label classification
+This network works by combining all 3 labels into one output by one-hot encoding and training using output of a sigmoid layer followed by binary cross-entropy loss.
+
+Note: For all networks, multiple activation functions(sigmoid, relu, tanh), optimizers(Adam, SGD, Adagrad) and loss functions(Cross-entropy, Weighted cross-entropy, focal loss) were attempted before settling on the final method based on extent of class imbalance resolution.
+
+Results:
+The multiple methods were not successful in removing class imbalance. For instance, the f1-score for each class of pattern, sleeve_length and neck_type were [0.12 0.06 0.12 0.00 0.10 0.00 0.55], [0.00, 0.00, 0.00, 0.84] and [0.00, 0.00, 0.12, 0.00, 0.11, 0.00, 0.12, 0.00, 0.00, 0.75] respectively.
+
+
+Future Work:
+(a) As mentioned above, I trained a dummy network instead of taking pretrained models and finetuning based on their outputs due to lack of space, gpu availability and time. We could use a pretrained VGG16 (or any other model) with frozen weights instead of 2 conv layers and finetune fc layers to get better results.
+
+(b) 453 missing data points were resolved by observing data patterns. 431 data points were left having #NaN values. This can be resolved by self-training, i.e., once the model starts giving good results, make predictions for data points with #NaN labels. If labels are predicted for these data points with high confidence, then they can be added to the training set with resolved labels for the next epoch.
+
+(c) Training can be done with losses which handle class imbalance better like asymmetric  and class balanced cross-entropy losses. These weren't explored due to lack of time.
+
+
+
